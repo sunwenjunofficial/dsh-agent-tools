@@ -72,6 +72,7 @@ node "$env:USERPROFILE\.dsh\tools\clash.mjs" mode  rule        # rule / global /
 2. **`web_fetch` 的 SSRF 保护**：目标域名解析到非公网 IP 时会报 `resolves to a non-public IP address`，这是工具限制，不是网络故障。换 `curl.exe` 走代理。
 3. **`web_fetch` 对空响应体报 `unsupported content type "unknown"`**：说明**连接是通的**（只是 204 没内容），别误判成网络故障。
 4. **TUN 关闭** ⇒ 不读系统代理的程序（部分 Electron 应用、Java、老 .NET）根本不走代理。要么给它们单独设代理，要么在 Verge 里开 TUN（需要管理员，会改路由）。
-5. **GitHub 直连通常可用**（`api.github.com` 直连 200），但 `git push` 大包、`raw.githubusercontent.com`、CI 下载常常需要代理。策略：先直连，失败再挂代理重试。
+5. **GitHub 直连看运气**：实测同一台机器上 `api.github.com` 直连时好时坏，`git push` 直连出现过 21 秒超时；走 7897 稳定。`github.ps1` 已实现"先直连、失败自动改走代理并把 `http.proxy` 记进该仓库"。
 6. **节点分组是服务级的**：`GitHub` 组指到 `🎯Direct` 时 Git 操作会走直连并可能失败；排查时先 `clash.mjs status` 看对应分组指向谁。
 7. 订阅到期/流量用尽会表现为"代理连着但全部节点 5xx 超时"，用 `clash.mjs delay Proxies` 一看便知（全 fail）。
+8. **代理 IP 是共享的**：`api.github.com` 未经认证走代理常返回 `403 API rate limit exceeded`（出口 IP 被别人用完了）。这不是网络坏了——用 token 认证的请求按 token 计额，不受影响。

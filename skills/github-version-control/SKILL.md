@@ -55,6 +55,12 @@ powershell -ExecutionPolicy Bypass -File $gh -Action whoami
 - git 通过 `credential.https://github.com.helper` 调用 `~/.dsh/tools/git-credential-github.ps1` 取 token，**仓库里不出现明文 token**。
 - 写入/更换：`-Action token-save -Token ghp_xxx`；撤销：`-Action token-clear`。
 - **永远不要把 token 写进代码、`.git/config`、提交信息或文档里。**
+- `~/.gitconfig` 里 `[credential "https://github.com"]` 第一行必须是**空的 `helper =`**（重置列表），用来屏蔽系统级 Git Credential Manager；否则每次 push 都会弹窗或报 `Cannot prompt because user interactivity has been disabled`。`github.ps1` 调用 git 时还会设 `GCM_INTERACTIVE=never` 兜底。
+
+## .gitignore 策略
+
+脚本会自动补齐常见规则（Python / Node / Rust / Gradle / Android / 编辑器 / 系统垃圾）。
+**注意**：`raw-analysis`、`dr-analysis` 这类分析目录里是几十上百 MB 的 DNG/JPG 素材，**不适合进 Git**（GitHub 单文件 100 MB 硬限制，仓库也会变砖）。素材留在本地，仓库只放代码和小样本。
 
 ## 排错
 
