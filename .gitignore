@@ -30,3 +30,13 @@ out/
 .idea/
 *.swp
 *.bak
+
+# --- added by dsh github.ps1 ---
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+.cxx/
+captures/
+.externalNativeBuild/
