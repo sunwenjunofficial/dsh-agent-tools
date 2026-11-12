@@ -142,7 +142,10 @@ async function ensureCore({ quiet = false } = {}) {
       return pipe;
     }
   }
-  throw new Error('启动后 30 秒仍未就绪：请在 Clash Verge 界面确认「内核已启动」、订阅未过期');
+  throw new Error(
+    '启动后 30 秒内核仍未响应。若是 Clash Verge 界面已经开着、只是内核被手动「停止」了，' +
+    '我无法远程点界面按钮——请在界面里点「启动内核」后重跑；否则检查订阅是否过期。'
+  );
 }
 
 async function getPort(pipe) {
