@@ -43,12 +43,23 @@ powershell -ExecutionPolicy Bypass -File $gh -Action whoami
 
 ## 收尾流程（每次开发都走一遍）
 
+0. **先 `-Action dirty -ProjectPath <项目根>` 扫一遍**：列出有未提交改动 / 有未推送 commit 的仓库。
+   多个会话轮番改同一个项目时，这一步能立刻发现"改了但没同步"的漏网项。
 1. **跑通验证**：能跑测试就跑测试，能起服务就起服务看一眼；不要提交一个自己明知坏掉的版本。
 2. **清垃圾**：把截图、`__pycache__`、临时 `.py`/`.js` 调试脚本、构建产物挡在版本库外（`.gitignore` 由脚本自动补）。
 3. **扫密钥**：直接 `-Action audit -ProjectPath <dir>`；有命中就清理后重来，**不要**用 `-Force` 绕过。
 4. **写提交信息**：说清这次改了什么，不要 `update`、`fix bug`、`改了一下`。
 5. **publish**：选择 bump 级别。
 6. **汇报**：把仓库 URL、版本号、commit 短 hash 一并告诉用户。
+
+## 自动推送钩子（第二道保险）
+
+`publish` 成功后会往仓库里装一个 `.git/hooks/post-commit`：**之后任何一次 `git commit`（不管哪个会话做的）都会自动推到 origin**，直连失败自动改走 Clash。
+
+- 它只保证"commit 过的都上去"，**管不了"改完没 commit"**——所以第 0 步的 `dirty` 检查不能省。
+- 新仓库第一次 publish 后自动安装；老仓库可以补：`-Action hook -ProjectPath <dir>`。
+- 钩子永远 `exit 0`，push 失败也不会卡住 commit，只会打一行提示。
+- 想临时不推：`git commit` 前设环境变量 `GIT_DSH_NOPUSH=1`（钩子会跳过）。
 
 ## 新项目从哪开始
 
@@ -78,5 +89,7 @@ powershell -ExecutionPolicy Bypass -File $gh -Action whoami
 | `remote: Support for password authentication was removed` | 没有走 credential helper，检查 `git config --global --get-all credential.https://github.com.helper` |
 | 文件超过 100 MB | GitHub 硬限制，用 `.gitignore` 排除或用 Releases 挂附件 |
 | **仓库描述里的中文变成 `?????`** | PowerShell 5.1 的 `Invoke-RestMethod` 在 ContentType 不带 charset 时把字符串体按 ISO-8859-1 编码，CJK 全变问号。`github.ps1` 已改为传 **UTF-8 字节**；已建坏的仓库用 `-Action describe -ProjectPath <dir> -Description "..."` 修回来 |
+| 别的会话改过项目，GitHub 上却没有 | 那个会话没 commit（钩子帮不了）。跑 `-Action dirty` 找出来，再 `-Action publish` 补上 |
+| `.ps1` 改完行为诡异（某条赋值"没生效"） | 脚本里有中文注释会导致编码错乱，甚至吞掉换行。**`.ps1` 只允许 ASCII**，中文放 README/skill 里 |
 
 > 提交信息、README、tag 走的是 git 协议，不受这个 bug 影响；只有走 REST API 的字段（仓库描述、issue/PR 正文）会中招。

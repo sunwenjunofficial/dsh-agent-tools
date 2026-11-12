@@ -34,3 +34,8 @@
 ## v0.3.3
 - 建仓/改描述后自动回读校验，编码被破坏时立即红字报错
 
+## v0.3.4
+- publish 后自动安装 post-commit 钩子：任何 commit 都会自动推送
+- 新增 -Action dirty：列出有未提交改动 / 未推送 commit 的仓库
+- 新增 -Action hook：给老仓库补装钩子
+

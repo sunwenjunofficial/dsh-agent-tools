@@ -20,7 +20,7 @@
 [CmdletBinding(DefaultParameterSetName = 'run')]
 param(
   [Parameter(Mandatory = $true, Position = 0)]
-  [ValidateSet('token-save', 'token-check', 'token-clear', 'whoami', 'ignore', 'audit', 'publish', 'describe', 'status')]
+  [ValidateSet('token-save', 'token-check', 'token-clear', 'whoami', 'ignore', 'audit', 'publish', 'describe', 'status', 'hook', 'dirty')]
   [string]$Action,
 
   [string]$Token,
@@ -213,6 +213,32 @@ $IgnoreLines = @(
   '*.swp'
   '*.bak'
 )
+
+# ------------------------------------------------------- auto-push git hook
+
+function Install-PostCommitHook {
+  # Any commit made by any session gets pushed, so "forgot to publish" cannot
+  # silently leave work only on this disk. Never blocks the commit itself.
+  param([string]$Root)
+  $gitDir = Join-Path $Root '.git'
+  if (-not (Test-Path $gitDir)) { return }
+  $hooks = Join-Path $gitDir 'hooks'
+  if (-not (Test-Path $hooks)) { New-Item -ItemType Directory -Path $hooks -Force | Out-Null }
+  $port = ((Get-ProxyUrl) -replace '^.*:', '')
+  $template = @'
+#!/bin/sh
+# installed by dsh github.ps1 -- auto-push every commit, never block it
+PORT=__PORT__
+if git push origin HEAD --follow-tags >/dev/null 2>&1; then exit 0; fi
+if git -c http.proxy=http://127.0.0.1:$PORT push origin HEAD --follow-tags >/dev/null 2>&1; then exit 0; fi
+echo "[dsh] auto-push failed (network?). Run: github.ps1 -Action publish" >&2
+exit 0
+'@
+  $content = $template.Replace('__PORT__', $port) -replace "`r`n", "`n"
+  $path = Join-Path $hooks 'post-commit'
+  [System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("[ok] auto-push hook -> " + $path) -ForegroundColor Green
+}
 
 function Ensure-GitIgnore {
   param([string]$Root)
@@ -464,6 +490,9 @@ function Invoke-Publish {
       Write-Host ("[ok] saved http.proxy=" + $proxyUrl + " for this repo") -ForegroundColor Yellow
     }
 
+    # any later commit (from any session) now reaches GitHub on its own
+    Install-PostCommitHook -Root $root
+
     # --- 9. report ---
     $sha = (GitOut @('rev-parse', '--short', 'HEAD')) -join ''
     $url = (GitOut @('remote', 'get-url', 'origin')) -join ''
@@ -523,6 +552,43 @@ switch ($Action) {
   'status' {
     $state = Get-RepoState -Root (Resolve-Path $ProjectPath).Path
     $state | Format-List | Out-String | Write-Host
+  }
+  'hook' {
+    Install-PostCommitHook -Root (Resolve-Path $ProjectPath).Path
+  }
+  'dirty' {
+    # list repos with uncommitted changes or commits that were never pushed
+    $scanRoot = (Resolve-Path $ProjectPath).Path
+    $candidates = New-Object System.Collections.ArrayList
+    if (Test-Path (Join-Path $scanRoot '.git')) { [void]$candidates.Add($scanRoot) }
+    Get-ChildItem $scanRoot -Directory -Force -ErrorAction SilentlyContinue -Depth 2 |
+      Where-Object { Test-Path (Join-Path $_.FullName '.git') } |
+      ForEach-Object { [void]$candidates.Add($_.FullName) }
+    if ($candidates.Count -eq 0) {
+      Write-Host ('[--] no git repo under ' + $scanRoot) -ForegroundColor Yellow
+      break
+    }
+    $rows = @()
+    foreach ($repoPath in ($candidates | Select-Object -Unique)) {
+      Push-Location $repoPath
+      try {
+        $uncommitted = @(GitOut @('status', '--porcelain')).Count
+        $unpushed = 0
+        $upstream = (GitOut @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')) -join ''
+        if ($LASTEXITCODE -eq 0 -and $upstream) {
+          $cnt = (GitOut @('rev-list', '--count', ($upstream + '..HEAD'))) -join ''
+          if ($cnt -match '^\d+$') { $unpushed = [int]$cnt }
+        }
+        if ($uncommitted -gt 0 -or $unpushed -gt 0) {
+          $rows += [pscustomobject]@{ Repo = (Split-Path $repoPath -Leaf); Uncommitted = $uncommitted; Unpushed = $unpushed }
+        }
+      } finally { Pop-Location }
+    }
+    if ($rows.Count -eq 0) { Write-Host '[ok] every repo is clean and pushed' -ForegroundColor Green }
+    else {
+      $rows | Format-Table -AutoSize | Out-String | Write-Host
+      Write-Host '  fix: github.ps1 -Action publish -ProjectPath <repo> -Message "..."' -ForegroundColor Yellow
+    }
   }
   'describe' {
     $state = Get-RepoState -Root (Resolve-Path $ProjectPath).Path
