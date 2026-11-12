@@ -27,3 +27,7 @@
 ## v0.3.1
 - 自动拉起超时的报错改成可执行指引（界面开着但内核被停的情况）
 
+## v0.3.2
+- 修复 REST API 中文载荷被编码成问号（PS 5.1 Invoke-RestMethod 按 latin1 编码字符串体）
+- 新增 `-Action describe`：改/修仓库描述
+

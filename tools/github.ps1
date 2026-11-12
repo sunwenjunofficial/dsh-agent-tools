@@ -20,7 +20,7 @@
 [CmdletBinding(DefaultParameterSetName = 'run')]
 param(
   [Parameter(Mandatory = $true, Position = 0)]
-  [ValidateSet('token-save', 'token-check', 'token-clear', 'whoami', 'ignore', 'audit', 'publish', 'status')]
+  [ValidateSet('token-save', 'token-check', 'token-clear', 'whoami', 'ignore', 'audit', 'publish', 'describe', 'status')]
   [string]$Action,
 
   [string]$Token,
@@ -28,6 +28,7 @@ param(
   [string]$Message,
   [ValidateSet('patch', 'minor', 'major', 'none')]
   [string]$Bump = 'patch',
+  [string]$Version,
   [string]$RepoName,
   [string]$Description = '',
   [switch]$Private,
@@ -114,8 +115,12 @@ function Invoke-GitHubApi {
     ErrorAction = 'Stop'
   }
   if ($Body) {
-    $params.Body = ($Body | ConvertTo-Json -Depth 6)
-    $params.ContentType = 'application/json'
+    # Windows PowerShell 5.1 encodes a *string* body as ISO-8859-1 when the
+    # ContentType carries no charset, silently turning every CJK char into '?'.
+    # Passing UTF-8 bytes sidesteps the conversion completely.
+    $json = $Body | ConvertTo-Json -Depth 6
+    $params.Body = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $params.ContentType = 'application/json; charset=utf-8'
   }
   try {
     return Invoke-RestMethod @params
@@ -345,7 +350,7 @@ function Invoke-Git {
 
 function Invoke-Publish {
   param(
-    [string]$Path, [string]$Msg, [string]$Kind, [string]$Name, [string]$Desc,
+    [string]$Path, [string]$Msg, [string]$Kind, [string]$Name, [string]$Desc, [string]$ExplicitVersion,
     [switch]$Priv, [switch]$SkipPush, [switch]$ForceIt, [switch]$DryRun
   )
 
@@ -411,7 +416,7 @@ function Invoke-Publish {
 
     # --- 6. version tag ---
     $state = Get-RepoState -Root $root
-    $nextTag = Get-NextVersion -LatestTag $state.Tag -Kind $Kind
+    if ($ExplicitVersion) { $nextTag = $ExplicitVersion } else { $nextTag = Get-NextVersion -LatestTag $state.Tag -Kind $Kind }
     if ($nextTag) {
       Write-Host ("[..] tag: " + $nextTag + "  (previous: " + ($(if ($state.Tag) { $state.Tag } else { 'none' })) + ")")
       if (-not $DryRun) {
@@ -511,8 +516,20 @@ switch ($Action) {
     $state = Get-RepoState -Root (Resolve-Path $ProjectPath).Path
     $state | Format-List | Out-String | Write-Host
   }
+  'describe' {
+    $state = Get-RepoState -Root (Resolve-Path $ProjectPath).Path
+    if (-not $state.Remote) { throw 'this project has no origin remote yet' }
+    if ($state.Remote -notmatch 'github\.com[:/]+([^/]+)/(.+?)(?:\.git)?$') {
+      throw ("not a github remote: " + $state.Remote)
+    }
+    $owner = $Matches[1]; $repo = $Matches[2]
+    if (-not $Description) { throw 'pass -Description "..."' }
+    $r = Invoke-GitHubApi -Method PATCH -Path "/repos/$owner/$repo" -Body @{ description = $Description }
+    Write-Host ("[ok] " + $owner + "/" + $repo + " description -> " + $r.description) -ForegroundColor Green
+    Write-Host ("     " + $r.html_url)
+  }
   'publish' {
-    Invoke-Publish -Path $ProjectPath -Msg $Message -Kind $Bump -Name $RepoName -Desc $Description `
+    Invoke-Publish -Path $ProjectPath -Msg $Message -Kind $Bump -Name $RepoName -Desc $Description -ExplicitVersion $Version `
       -Priv:$Private -SkipPush:$NoPush -ForceIt:$Force -DryRun:$WhatIf
   }
 }

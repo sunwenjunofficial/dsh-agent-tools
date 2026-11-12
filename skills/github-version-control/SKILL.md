@@ -77,3 +77,6 @@ powershell -ExecutionPolicy Bypass -File $gh -Action whoami
 | push 卡住/超时 | 正常，脚本会自动改走 `http.proxy=http://127.0.0.1:7897` 重试；仍失败先跑 `netcheck.ps1` |
 | `remote: Support for password authentication was removed` | 没有走 credential helper，检查 `git config --global --get-all credential.https://github.com.helper` |
 | 文件超过 100 MB | GitHub 硬限制，用 `.gitignore` 排除或用 Releases 挂附件 |
+| **仓库描述里的中文变成 `?????`** | PowerShell 5.1 的 `Invoke-RestMethod` 在 ContentType 不带 charset 时把字符串体按 ISO-8859-1 编码，CJK 全变问号。`github.ps1` 已改为传 **UTF-8 字节**；已建坏的仓库用 `-Action describe -ProjectPath <dir> -Description "..."` 修回来 |
+
+> 提交信息、README、tag 走的是 git 协议，不受这个 bug 影响；只有走 REST API 的字段（仓库描述、issue/PR 正文）会中招。
