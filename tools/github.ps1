@@ -149,6 +149,14 @@ function New-GitHubRepo {
   }
   $r = Invoke-GitHubApi -Method POST -Path '/user/repos' -Body $body
   Write-Host ("[ok] created repo: " + $r.html_url) -ForegroundColor Green
+  # GitHub echoes what it actually stored: a mismatch means the payload was
+  # re-encoded somewhere and the Chinese text is now '?????'.
+  if ($Desc -and $r.description -ne $Desc) {
+    Write-Host '[!!] description round-trip mismatch - text was mangled in transit' -ForegroundColor Red
+    Write-Host ('     sent: ' + $Desc)
+    Write-Host ('     got : ' + $r.description)
+    Write-Host '     fix: github.ps1 -Action describe -ProjectPath <dir> -Description "..."' -ForegroundColor Yellow
+  }
   return $r
 }
 
@@ -525,6 +533,12 @@ switch ($Action) {
     $owner = $Matches[1]; $repo = $Matches[2]
     if (-not $Description) { throw 'pass -Description "..."' }
     $r = Invoke-GitHubApi -Method PATCH -Path "/repos/$owner/$repo" -Body @{ description = $Description }
+    if ($r.description -ne $Description) {
+      Write-Host '[!!] read-back does not match what was sent' -ForegroundColor Red
+      Write-Host ('     sent: ' + $Description)
+      Write-Host ('     got : ' + $r.description)
+      return
+    }
     Write-Host ("[ok] " + $owner + "/" + $repo + " description -> " + $r.description) -ForegroundColor Green
     Write-Host ("     " + $r.html_url)
   }

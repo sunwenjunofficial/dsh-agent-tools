@@ -31,3 +31,6 @@
 - 修复 REST API 中文载荷被编码成问号（PS 5.1 Invoke-RestMethod 按 latin1 编码字符串体）
 - 新增 `-Action describe`：改/修仓库描述
 
+## v0.3.3
+- 建仓/改描述后自动回读校验，编码被破坏时立即红字报错
+
