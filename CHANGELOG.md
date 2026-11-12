@@ -13,3 +13,6 @@
 ## v0.2.1
 - skill 补充：GitHub 直连不稳、代理 IP 共享导致 403、凭据链重置细节
 
+## v0.2.2
+- clash.mjs status 输出措辞修正
+

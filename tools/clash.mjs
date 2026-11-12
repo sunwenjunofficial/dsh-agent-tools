@@ -126,8 +126,7 @@ try {
       console.log('内核版本 :', (await request(pipe, 'GET', '/version')).json.version);
       console.log('命名管道 :', pipe);
       console.log('运行模式 :', cfg.mode, '| mixed-port:', cfg['mixed-port'], '| tun:', cfg.tun?.enable);
-      const regKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings';
-      console.log('系统代理 :', sys || `(注册表 HKCU\\...\\Internet Settings)`);
+      console.log('系统代理 : 见 netcheck.ps1（HKCU\\...\\Internet Settings）');
       console.log('选择器组 :');
       for (const g of groupNames(proxies)) {
         console.log(`  ${g.name.padEnd(14)} [${g.type}] → ${g.now}   (${g.count} 个候选)`);
