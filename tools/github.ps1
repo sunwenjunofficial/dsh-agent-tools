@@ -41,7 +41,21 @@ param(
 $ErrorActionPreference = 'Continue'
 $SecretDir = Join-Path $env:USERPROFILE '.dsh\secrets'
 $TokenFile = Join-Path $SecretDir 'github-token.bin'
-$ProxyUrl = 'http://127.0.0.1:7897'
+$script:CachedProxyUrl = $null
+
+function Get-ProxyUrl {
+  # ask the Clash tool for the live mixed port; fall back to the documented default
+  if ($script:CachedProxyUrl) { return $script:CachedProxyUrl }
+  $port = 0
+  $clash = Join-Path $env:USERPROFILE '.dsh\tools\clash.mjs'
+  if ((Test-Path $clash) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+    $out = & node $clash port 2>$null
+    if ($out -match '^\s*(\d+)\s*$') { $port = [int]$Matches[1] }
+  }
+  if ($port -le 0) { $port = 7897 }
+  $script:CachedProxyUrl = "http://127.0.0.1:$port"
+  return $script:CachedProxyUrl
+}
 $GhUser = 'sunwenjunofficial'
 
 # ---------------------------------------------------------------- token (DPAPI)
@@ -426,14 +440,15 @@ function Invoke-Publish {
 
     # --- 8. push (direct, then via Clash) ---
     $branch = Get-GitBranch
+    $proxyUrl = Get-ProxyUrl
     Write-Host ("[..] pushing " + $branch + " ...")
     $code = Invoke-Git @('push', '-u', 'origin', $branch, '--follow-tags') -AllowFail
     if ($code -ne 0) {
-      Write-Host '[..] direct push failed -> retry through Clash proxy 7897' -ForegroundColor Yellow
-      $code = Invoke-Git @('-c', "http.proxy=$ProxyUrl", 'push', '-u', 'origin', $branch, '--follow-tags') -AllowFail
+      Write-Host ("[..] direct push failed -> retry through Clash proxy " + $proxyUrl) -ForegroundColor Yellow
+      $code = Invoke-Git @('-c', "http.proxy=$proxyUrl", 'push', '-u', 'origin', $branch, '--follow-tags') -AllowFail
       if ($code -ne 0) { throw 'push failed even through proxy' }
-      Invoke-Git @('config', 'http.proxy', $ProxyUrl) -AllowFail | Out-Null
-      Write-Host ("[ok] saved http.proxy=" + $ProxyUrl + " for this repo") -ForegroundColor Yellow
+      Invoke-Git @('config', 'http.proxy', $proxyUrl) -AllowFail | Out-Null
+      Write-Host ("[ok] saved http.proxy=" + $proxyUrl + " for this repo") -ForegroundColor Yellow
     }
 
     # --- 9. report ---

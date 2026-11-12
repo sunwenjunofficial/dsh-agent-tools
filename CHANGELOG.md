@@ -16,3 +16,11 @@
 ## v0.2.2
 - clash.mjs status 输出措辞修正
 
+## v0.3.0
+- clash.mjs: 管道名动态扫描（不再依赖 config.yaml 的 hash 与模板前缀）
+- clash.mjs: 新增 port / start 命令，端口从内核 API 读取
+- clash.mjs: 内核未响应时自动拉起 Verge 并轮询等待（--no-start 可关）
+- netcheck.ps1: 自动拉起、出口 IP 校验、VERDICT 行、动态端口
+- github.ps1: 代理端口改为动态探测
+- skill 补充开发/聊天判定与稳定性设计
+

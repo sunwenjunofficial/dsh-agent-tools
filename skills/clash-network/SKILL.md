@@ -25,12 +25,29 @@
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.dsh\tools\netcheck.ps1"
 ```
 
-输出会告出：进程在不在、7897 通不通、系统代理值、以及"直连 vs 代理"逐个站点的状态码。按结论处理：
+依次查：内核管道 → 混合端口 → 系统代理 → 8 个站点「直连 vs 代理」→ 代理出口 IP，末尾打一行 `VERDICT: ok|degraded|down`。
+**内核没起来它会自己 `Start-Process` 拉起 Verge 并轮询等待（30 秒上限）**，`-NoStart` 可关掉这个行为。
 
-- 进程不在 → 启动 `clash-verge.exe`（`Start-Process 'C:\Program Files\Clash Verge\clash-verge.exe'`），等 5 秒再测。
-- 7897 不通但进程在 → Verge 可能处于"已停止内核"，让用户点一下界面开关，或重启 Verge。
-- 代理通但某站仍失败 → 该站走的是 DIRECT 或被服务级分组指定到 `🎯Direct`，用下方 `clash.mjs` 把 `GitHub` / `Google` / `AI` 组切到 `Proxies`。
-- 代理本身通、延迟高 → `clash.mjs best Proxies` 换最快的节点。
+按 VERDICT 处理：
+
+- `down`（内核没起/端口关闭）→ 自检已尝试拉起；还不行就让用户在 Verge 界面点「启动内核」。
+- `degraded` 且 `proxy-blocked` → 节点挂了：`node ~/.dsh/tools/clash.mjs best Proxies`。
+- `degraded` 且 `sysproxy-off` → 用户在 Verge 里关了系统代理，GUI 应用会走直连（命令行工具靠环境变量，不受影响）。
+- `ok` 但某个具体站点失败 → 大概率是该站走 DIRECT 或被服务级分组指到 `🎯Direct`，见下方 `use`。
+
+## 稳定性设计（为什么关了再开还能用）
+
+| 场景 | 结果 |
+|---|---|
+| 只退出 Verge 界面（进程 `clash-verge.exe` 没了） | **内核 `verge-mihomo` 由 Windows 服务 `clash-verge-service` 守护，照常跑**；端口和管道都在，工具无感 |
+| 内核真的停了 / Verge 完全退出 | 工具的自动拉起生效：扫不到管道 → 启动 `clash-verge.exe` → 轮询到管道就绪 |
+| Verge 升级、重装、换安装路径 | 管道名里的 hash 会变，但工具每次**动态扫描** `\\.\pipe\verge-mihomo-*` 并优先取 `production`，不用改代码 |
+| 用户改了混合端口 | 端口从内核 `/configs` 的 `mixed-port` 读，其次读 `verge.yaml` 的 `verge_mixed_port`，最后才回落 7897 |
+| 订阅过期 / 流量用尽 | `delay Proxies` 全部 fail，`best` 会直接报「所有节点测速均失败（订阅可能过期/流量用尽）」 |
+
+实测过：重启 Verge 后管道名 hash 不变（内核 v1.19.32→v1.19.33 也没变），系统代理会被 Verge 自动重新置回 `ProxyEnable=1`。
+
+**不要用 `Stop-Process` 杀 `verge-mihomo` 来"重启"**——它跑在服务账户下，普通权限杀不掉（静默失败），而且服务会立刻拉起。要重启就在 Verge 界面操作。
 
 ## 让命令行工具走代理
 
